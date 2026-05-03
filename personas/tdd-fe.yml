@@ -1,0 +1,5 @@
+# Example: linked persona + different linked context
+# Usage: /persona tdd-fe
+persona: tdd-expert.md
+context:
+  - fe/AGENTS.md

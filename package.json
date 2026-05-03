@@ -1,0 +1,48 @@
+{
+  "name": "pi-persona",
+  "version": "1.0.0",
+  "description": "Set custom agent personas while preserving context files, skills, tools, date, and working directory",
+  "type": "module",
+  "main": "index.ts",
+  "license": "GPL-3.0-or-later",
+  "author": "34x <60165+34x@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/34x/pi-persona.git"
+  },
+  "homepage": "https://github.com/34x/pi-persona#readme",
+  "bugs": {
+    "url": "https://github.com/34x/pi-persona/issues"
+  },
+  "keywords": [
+    "pi",
+    "pi-package",
+    "persona",
+    "extension",
+    "coding-agent",
+    "ai"
+  ],
+  "pi": {
+    "type": "extension",
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.67.0"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.67.0",
+    "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.5",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.4"
+  },
+  "dependencies": {
+    "yaml": "^2.8.3"
+  }
+}
