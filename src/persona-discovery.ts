@@ -154,6 +154,7 @@ export class PersonaDiscovery {
     display: string;
     params?: Record<string, unknown>;
   } | null> {
+    if (!value || typeof value !== "string") return null;
     if (looksLikePath(value)) {
       const loaded = await this.loadPersonaFile(expandPath(value, homedir));
       if (!loaded) return null;
@@ -200,6 +201,7 @@ export class PersonaDiscovery {
     homedir: string,
     tmpDir: string,
   ): Promise<string> {
+    if (!value || typeof value !== "string") return value ?? "";
     if (looksLikePath(value)) {
       return expandPath(value, homedir);
     }

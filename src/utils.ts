@@ -152,6 +152,7 @@ export function displayPath(filePath: string, homedir: string): string {
  * or end with known file extensions.
  */
 export function looksLikePath(s: string): boolean {
+  if (!s || typeof s !== "string") return false;
   return (
     s.startsWith("/") ||
     s.startsWith("./") ||
