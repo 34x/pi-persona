@@ -13,6 +13,7 @@ import type {
   DiscoveredProfileFile,
   DiscoveredPersona,
   DiscoveredProfile,
+  ProfileConfig,
 } from "../types";
 
 // ---- Duck-typed discovery interface (tests can pass lightweight fakes) ----
@@ -35,13 +36,9 @@ export interface DiscoveryOps {
     params?: Record<string, unknown>;
   } | null>;
   resolveProfilePaths(
-    config: {
-      persona: string;
-      context?: string[];
-      params?: Record<string, unknown>;
-    },
+    config: ProfileConfig,
     baseDir: string,
-  ): { persona: string; context: string[]; params?: Record<string, unknown> };
+  ): ProfileConfig;
 }
 
 // ---- Dependency bag passed from the adapter ----
@@ -54,10 +51,7 @@ export interface SelectorDeps {
     access: (p: string) => Promise<boolean>;
   };
   homedir: string;
-  profilesConfig: Record<
-    string,
-    { persona: string; context?: string[]; params?: Record<string, unknown> }
-  >;
+  profilesConfig: Record<string, ProfileConfig>;
   onSetPersona: (
     prompt: string,
     display: string,
@@ -104,19 +98,28 @@ export async function buildSelectorList(
     if (item.kind === "settings-profile") {
       const p = item.profile;
       const ctxCount = p.context.length;
-      const preview = deps.looksLikePath(p.persona)
-        ? deps.displayPath(p.persona)
-        : p.persona.slice(0, 20) + (p.persona.length > 20 ? "..." : "");
-      options.push(`📦 ${p.name}: ${preview} + ${ctxCount} context`);
+      if (p.persona) {
+        const preview = deps.looksLikePath(p.persona)
+          ? deps.displayPath(p.persona)
+          : p.persona.slice(0, 20) + (p.persona.length > 20 ? "..." : "");
+        options.push(`📦 ${p.name}: ${preview} + ${ctxCount} context`);
+      } else {
+        options.push(`📦 ${p.name}: ${ctxCount} context file(s)`);
+      }
     } else if (item.kind === "profile-file") {
       const pf = item.pf;
-      const ctxCount = pf.config.context?.length ?? 0;
-      const preview = deps.looksLikePath(pf.config.persona)
-        ? deps.displayPath(pf.config.persona)
-        : pf.config.persona.slice(0, 20) +
-          (pf.config.persona.length > 20 ? "..." : "");
-      const desc = pf.description ? ` — ${pf.description.slice(0, 30)}` : "";
-      options.push(`📋 ${pf.name}${desc}: ${preview} + ${ctxCount} context`);
+      const pCtxCount = pf.config.context?.length ?? 0;
+      if (pf.config.persona) {
+        const preview = deps.looksLikePath(pf.config.persona)
+          ? deps.displayPath(pf.config.persona)
+          : pf.config.persona.slice(0, 20) +
+            (pf.config.persona.length > 20 ? "..." : "");
+        const desc = pf.description ? ` — ${pf.description.slice(0, 30)}` : "";
+        options.push(`📋 ${pf.name}${desc}: ${preview} + ${pCtxCount} context`);
+      } else {
+        const desc = pf.description ? ` — ${pf.description.slice(0, 30)}` : "";
+        options.push(`📋 ${pf.name}${desc}: ${pCtxCount} context file(s)`);
+      }
     } else {
       const p = item.persona;
       const shortDesc =
@@ -171,21 +174,26 @@ export async function handleSelectorSelection(
 ): Promise<void> {
   if (selected.kind === "settings-profile") {
     const profile = selected.profile;
-    const resolved = await deps.discovery.resolvePersona(
-      profile.persona,
-      deps.homedir,
-    );
-    if (!resolved) {
+    // Resolve persona if specified (optional — profile may just add context/params)
+    const resolved = profile.persona
+      ? await deps.discovery.resolvePersona(profile.persona, deps.homedir)
+      : null;
+
+    if (profile.persona && !resolved) {
       ctx.ui.notify(`Failed to load persona from ${profile.persona}`, "error");
-      return;
     }
 
-    const merged = mergeParams(resolved.params, profile.params);
-    await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
-      type: "profile",
-      name: profile.name,
-    });
-    applyParams(deps.manager, merged);
+    const merged = mergeParams(resolved?.params, profile.params);
+
+    if (resolved) {
+      await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
+        type: "profile",
+        name: profile.name,
+      });
+      applyParams(deps.manager, merged);
+    } else {
+      applyParams(deps.manager, merged);
+    }
 
     if (profile.context.length > 0) {
       const resolvedCtxPaths = await Promise.all(
@@ -196,14 +204,27 @@ export async function handleSelectorSelection(
       deps.onPersist();
       deps.onUpdateStatusBar(ctx);
 
-      let msg = `Profile "${profile.name}" loaded: persona "${resolved.display}"`;
-      if (added > 0) msg += ` + ${added} context`;
-      if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
-      msg += formatParamNote(merged);
-      ctx.ui.notify(msg, "info");
-    } else {
+      if (resolved) {
+        let msg = `Profile "${profile.name}" loaded: persona "${resolved.display}"`;
+        if (added > 0) msg += ` + ${added} context`;
+        if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+        msg += formatParamNote(merged);
+        ctx.ui.notify(msg, "info");
+      } else {
+        let msg = `Profile "${profile.name}" loaded`;
+        if (added > 0) msg += `: ${added} context file(s) added`;
+        if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+        msg += formatParamNote(merged);
+        ctx.ui.notify(msg, "info");
+      }
+    } else if (resolved) {
       ctx.ui.notify(
         `Profile "${profile.name}" loaded: persona "${resolved.display}"${formatParamNote(merged)}`,
+        "info",
+      );
+    } else {
+      ctx.ui.notify(
+        `Profile "${profile.name}" loaded (no persona)${formatParamNote(merged)}`,
         "info",
       );
     }
@@ -217,24 +238,30 @@ export async function handleSelectorSelection(
       pf.config,
       baseDir,
     );
-    const resolved = await deps.discovery.resolvePersona(
-      resolvedConfig.persona,
-      deps.homedir,
-    );
-    if (!resolved) {
+
+    // Resolve persona if specified (optional — profile may just add context/params)
+    const resolved = resolvedConfig.persona
+      ? await deps.discovery.resolvePersona(resolvedConfig.persona, deps.homedir)
+      : null;
+
+    if (resolvedConfig.persona && !resolved) {
       ctx.ui.notify(
-        `Failed to load persona from ${pf.config.persona}`,
+        `Failed to load persona from ${resolvedConfig.persona}`,
         "error",
       );
-      return;
     }
 
-    const merged = mergeParams(resolved.params, resolvedConfig.params);
-    await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
-      type: "profile-file",
-      name: pf.name,
-    });
-    applyParams(deps.manager, merged);
+    const merged = mergeParams(resolved?.params, resolvedConfig.params);
+
+    if (resolved) {
+      await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
+        type: "profile-file",
+        name: pf.name,
+      });
+      applyParams(deps.manager, merged);
+    } else {
+      applyParams(deps.manager, merged);
+    }
 
     const contextEntries = resolvedConfig.context ?? [];
     if (contextEntries.length > 0) {
@@ -246,14 +273,27 @@ export async function handleSelectorSelection(
       deps.onPersist();
       deps.onUpdateStatusBar(ctx);
 
-      let msg = `Profile "${pf.name}" loaded: persona "${resolved.display}"`;
-      if (added > 0) msg += ` + ${added} context`;
-      if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
-      msg += formatParamNote(merged);
-      ctx.ui.notify(msg, "info");
-    } else {
+      if (resolved) {
+        let msg = `Profile "${pf.name}" loaded: persona "${resolved.display}"`;
+        if (added > 0) msg += ` + ${added} context`;
+        if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+        msg += formatParamNote(merged);
+        ctx.ui.notify(msg, "info");
+      } else {
+        let msg = `Profile "${pf.name}" loaded`;
+        if (added > 0) msg += `: ${added} context file(s) added`;
+        if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+        msg += formatParamNote(merged);
+        ctx.ui.notify(msg, "info");
+      }
+    } else if (resolved) {
       ctx.ui.notify(
         `Profile "${pf.name}" loaded: persona "${resolved.display}"${formatParamNote(merged)}`,
+        "info",
+      );
+    } else {
+      ctx.ui.notify(
+        `Profile "${pf.name}" loaded (no persona)${formatParamNote(merged)}`,
         "info",
       );
     }

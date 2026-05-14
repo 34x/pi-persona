@@ -222,10 +222,12 @@ export class PersonaDiscovery {
   resolveProfilePaths(
     config: ProfileConfig,
     baseDir: string,
-  ): { persona: string; context: string[]; params?: Record<string, unknown> } {
-    const persona = looksLikePath(config.persona)
-      ? this.resolveRelativePath(config.persona, baseDir)
-      : config.persona;
+  ): ProfileConfig {
+    const persona = config.persona
+      ? (looksLikePath(config.persona)
+          ? this.resolveRelativePath(config.persona, baseDir)
+          : config.persona)
+      : undefined;
 
     const context =
       config.context?.map((c) =>

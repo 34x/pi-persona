@@ -9,7 +9,8 @@
 // ============================================================================
 
 export interface ProfileConfig {
-  persona: string;
+  /** Optional — omit to use default personality without changing it */
+  persona?: string;
   context?: string[];
   /** Optional inference parameters (temperature, top_p, top_k, max_tokens, etc.) */
   params?: Record<string, unknown>;
@@ -17,6 +18,11 @@ export interface ProfileConfig {
 
 export interface PiPersonaSettings {
   personaPaths?: string[];
+  /**
+   * Context files to always load on startup (unconditional, like AGENTS.md).
+   * Each entry is a file path or inline text, resolved relative to the project root.
+   */
+  context?: string[];
   profiles?: Record<string, ProfileConfig>;
   /**
    * Default persona/profile to load on startup when no persona is active.
@@ -59,7 +65,7 @@ export interface DiscoveredPersona {
 
 export interface DiscoveredProfile {
   name: string;
-  persona: string;
+  persona?: string;
   context: string[];
   params?: Record<string, unknown>;
 }

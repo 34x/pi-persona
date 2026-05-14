@@ -8,7 +8,7 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { FileIO } from "../io";
 import type { PersonaManager } from "../persona-manager";
 import type { PersonaDiscovery } from "../persona-discovery";
-import type { PersonaSource } from "../types";
+import type { PersonaSource, ProfileConfig } from "../types";
 
 // ---- Dependency bag ----
 
@@ -18,10 +18,7 @@ export interface ArgHandlerDeps {
   io: FileIO;
   homedir: string;
   tmpDir: string;
-  profilesConfig: Record<
-    string,
-    { persona: string; context?: string[]; params?: Record<string, unknown> }
-  >;
+  profilesConfig: Record<string, ProfileConfig>;
   onSetPersona: (
     prompt: string,
     display: string,
@@ -69,24 +66,32 @@ export async function loadSettingsProfile(
   const profile = deps.profilesConfig[name];
   if (!profile) return false;
 
-  const resolved = await deps.discovery.resolvePersona(
-    profile.persona,
-    deps.homedir,
-  );
-  if (!resolved) {
+  // Resolve persona if specified (optional — profile may just add context/params)
+  const resolved = profile.persona
+    ? await deps.discovery.resolvePersona(profile.persona, deps.homedir)
+    : null;
+
+  if (profile.persona && !resolved) {
     deps.onNotify(`Failed to load persona: ${profile.persona}`, "error");
-    return true; // handled
   }
 
-  const merged = mergeParams(resolved.params, profile.params);
-  await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
-    type: "profile",
-    name,
-  });
-  if (Object.keys(merged).length > 0) {
+  // Merge params regardless of persona
+  const merged = mergeParams(resolved?.params, profile.params);
+
+  // Set persona if resolved successfully
+  if (resolved) {
+    await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
+      type: "profile",
+      name,
+    });
+    if (Object.keys(merged).length > 0) {
+      deps.manager.setParams(merged);
+    }
+  } else if (Object.keys(merged).length > 0) {
     deps.manager.setParams(merged);
   }
 
+  // Load context regardless of persona
   const contextEntries = profile.context ?? [];
   if (contextEntries.length > 0) {
     const resolvedCtxPaths = await Promise.all(
@@ -97,14 +102,27 @@ export async function loadSettingsProfile(
     deps.onPersist();
     deps.onUpdateStatusBar(ctx);
 
-    let msg = `Profile "${name}" loaded: persona "${resolved.display}"`;
-    if (added > 0) msg += ` + ${added} context`;
-    if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
-    msg += formatParamNote(merged);
-    deps.onNotify(msg, "info");
-  } else {
+    if (resolved) {
+      let msg = `Profile "${name}" loaded: persona "${resolved.display}"`;
+      if (added > 0) msg += ` + ${added} context`;
+      if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+      msg += formatParamNote(merged);
+      deps.onNotify(msg, "info");
+    } else {
+      let msg = `Profile "${name}" loaded`;
+      if (added > 0) msg += `: ${added} context file(s) added`;
+      if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+      msg += formatParamNote(merged);
+      deps.onNotify(msg, "info");
+    }
+  } else if (resolved) {
     deps.onNotify(
       `Profile "${name}" loaded: persona "${resolved.display}"${formatParamNote(merged)}`,
+      "info",
+    );
+  } else {
+    deps.onNotify(
+      `Profile "${name}" loaded (no persona)${formatParamNote(merged)}`,
       "info",
     );
   }
@@ -127,24 +145,33 @@ export async function loadProfileFileByName(
 
   const baseDir = pf.fullPath.substring(0, pf.fullPath.lastIndexOf("/"));
   const resolvedConfig = deps.discovery.resolveProfilePaths(pf.config, baseDir);
-  const resolved = await deps.discovery.resolvePersona(
-    resolvedConfig.persona,
-    deps.homedir,
-  );
-  if (!resolved) {
-    deps.onNotify(`Failed to load persona from ${pf.config.persona}`, "error");
-    return true;
+
+  // Resolve persona if specified (optional — profile may just add context/params)
+  const resolved = resolvedConfig.persona
+    ? await deps.discovery.resolvePersona(resolvedConfig.persona, deps.homedir)
+    : null;
+
+  if (resolvedConfig.persona && !resolved) {
+    deps.onNotify(`Failed to load persona from ${resolvedConfig.persona}`, "error");
   }
 
-  const merged = mergeParams(resolved.params, resolvedConfig.params);
-  await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
-    type: "profile-file",
-    name: pf.name,
-  });
-  if (Object.keys(merged).length > 0) {
+  // Merge params regardless of persona
+  const merged = mergeParams(resolved?.params, resolvedConfig.params);
+
+  // Set persona if resolved successfully
+  if (resolved) {
+    await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
+      type: "profile-file",
+      name: pf.name,
+    });
+    if (Object.keys(merged).length > 0) {
+      deps.manager.setParams(merged);
+    }
+  } else if (Object.keys(merged).length > 0) {
     deps.manager.setParams(merged);
   }
 
+  // Load context regardless of persona
   const contextEntries = resolvedConfig.context ?? [];
   if (contextEntries.length > 0) {
     const resolvedCtxPaths = await Promise.all(
@@ -155,14 +182,27 @@ export async function loadProfileFileByName(
     deps.onPersist();
     deps.onUpdateStatusBar(ctx);
 
-    let msg = `Profile "${pf.name}" loaded: persona "${resolved.display}"`;
-    if (added > 0) msg += ` + ${added} context`;
-    if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
-    msg += formatParamNote(merged);
-    deps.onNotify(msg, "info");
-  } else {
+    if (resolved) {
+      let msg = `Profile "${pf.name}" loaded: persona "${resolved.display}"`;
+      if (added > 0) msg += ` + ${added} context`;
+      if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+      msg += formatParamNote(merged);
+      deps.onNotify(msg, "info");
+    } else {
+      let msg = `Profile "${pf.name}" loaded`;
+      if (added > 0) msg += `: ${added} context file(s) added`;
+      if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+      msg += formatParamNote(merged);
+      deps.onNotify(msg, "info");
+    }
+  } else if (resolved) {
     deps.onNotify(
       `Profile "${pf.name}" loaded: persona "${resolved.display}"${formatParamNote(merged)}`,
+      "info",
+    );
+  } else {
+    deps.onNotify(
+      `Profile "${pf.name}" loaded (no persona)${formatParamNote(merged)}`,
       "info",
     );
   }
@@ -222,31 +262,6 @@ async function loadYamlProfile(
         ? (parsed.params as Record<string, unknown>)
         : undefined;
 
-    if (!persona) {
-      deps.onNotify(
-        `Profile ${fullPath} is missing a 'persona' field`,
-        "error",
-      );
-      return "handled";
-    }
-
-    const baseDir = fullPath.substring(0, fullPath.lastIndexOf("/"));
-    const resolvedConfig = deps.discovery.resolveProfilePaths(
-      { persona, context, params },
-      baseDir,
-    );
-    const resolved = await deps.discovery.resolvePersona(
-      resolvedConfig.persona,
-      deps.homedir,
-    );
-    if (!resolved) {
-      deps.onNotify(
-        `Failed to load persona from profile: ${resolvedConfig.persona}`,
-        "error",
-      );
-      return "handled";
-    }
-
     const profileName =
       typeof parsed.name === "string"
         ? parsed.name
@@ -254,35 +269,99 @@ async function loadYamlProfile(
             .substring(fullPath.lastIndexOf("/") + 1)
             .replace(/\.[^.]+$/, "");
 
-    const merged = mergeParams(resolved.params, resolvedConfig.params);
-    await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
-      type: "profile-file",
-      name: profileName,
-    });
-    if (Object.keys(merged).length > 0) {
-      deps.manager.setParams(merged);
-    }
+    if (!persona) {
+      // No persona specified — profile may just add context/params
+      if (params && Object.keys(params).length > 0) {
+        deps.manager.setParams(params);
+      }
+      if (context.length > 0) {
+        const resolvedCtxPaths = await Promise.all(
+          context.map((c) => deps.onResolveAndTrackContext(c)),
+        );
+        const { added, duplicates } =
+          deps.manager.addContextPaths(resolvedCtxPaths);
+        deps.onPersist();
+        deps.onUpdateStatusBar(ctx);
 
-    const contextEntries = resolvedConfig.context ?? [];
-    if (contextEntries.length > 0) {
-      const resolvedCtxPaths = await Promise.all(
-        contextEntries.map((c) => deps.onResolveAndTrackContext(c)),
-      );
-      const { added, duplicates } =
-        deps.manager.addContextPaths(resolvedCtxPaths);
-      deps.onPersist();
-      deps.onUpdateStatusBar(ctx);
-
-      let msg = `Profile "${profileName}" loaded: persona "${resolved.display}"`;
-      if (added > 0) msg += ` + ${added} context`;
-      if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
-      msg += formatParamNote(merged);
-      deps.onNotify(msg, "info");
+        let msg = `Profile "${profileName}" loaded`;
+        if (added > 0) msg += `: ${added} context file(s) added`;
+        if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+        msg += formatParamNote((params ?? {}) as Record<string, unknown>);
+        deps.onNotify(msg, "info");
+      } else {
+        deps.onNotify(
+          `Profile "${profileName}" loaded (no persona)`,
+          "info",
+        );
+      }
     } else {
-      deps.onNotify(
-        `Profile "${profileName}" loaded: persona "${resolved.display}"${formatParamNote(merged)}`,
-        "info",
+      // Persona specified — resolve and load it
+      const baseDir = fullPath.substring(0, fullPath.lastIndexOf("/"));
+      const resolvedConfig = deps.discovery.resolveProfilePaths(
+        { persona, context, params },
+        baseDir,
       );
+      const resolved = await deps.discovery.resolvePersona(
+        resolvedConfig.persona!,
+        deps.homedir,
+      );
+      if (!resolved) {
+        deps.onNotify(
+          `Failed to load persona from profile: ${resolvedConfig.persona!}`,
+          "error",
+        );
+      }
+
+      const merged = mergeParams(resolved?.params, resolvedConfig.params);
+
+      // Set persona if resolved successfully
+      if (resolved) {
+        await deps.onSetPersona(resolved.prompt, resolved.display, ctx, {
+          type: "profile-file",
+          name: profileName,
+        });
+        if (Object.keys(merged).length > 0) {
+          deps.manager.setParams(merged);
+        }
+      } else if (Object.keys(merged).length > 0) {
+        deps.manager.setParams(merged);
+      }
+
+      // Load context regardless of persona
+      const contextEntries = resolvedConfig.context ?? [];
+      if (contextEntries.length > 0) {
+        const resolvedCtxPaths = await Promise.all(
+          contextEntries.map((c) => deps.onResolveAndTrackContext(c)),
+        );
+        const { added, duplicates } =
+          deps.manager.addContextPaths(resolvedCtxPaths);
+        deps.onPersist();
+        deps.onUpdateStatusBar(ctx);
+
+        if (resolved) {
+          let msg = `Profile "${profileName}" loaded: persona "${resolved.display}"`;
+          if (added > 0) msg += ` + ${added} context`;
+          if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+          msg += formatParamNote(merged);
+          deps.onNotify(msg, "info");
+        } else {
+          let msg = `Profile "${profileName}" loaded`;
+          if (added > 0) msg += `: ${added} context file(s) added`;
+          if (duplicates.length > 0) msg += `\nSkipped: ${duplicates.join(", ")}`;
+          msg += formatParamNote(merged);
+          deps.onNotify(msg, "info");
+        }
+      } else if (resolved) {
+        deps.onNotify(
+          `Profile "${profileName}" loaded: persona "${resolved.display}"${formatParamNote(merged)}`,
+          "info",
+        );
+      } else {
+        deps.onNotify(
+          `Profile "${profileName}" loaded (no persona)${formatParamNote(merged)}`,
+          "info",
+        );
+      }
     }
   } catch {
     deps.onNotify(`Failed to parse profile: ${fullPath}`, "error");

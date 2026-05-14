@@ -389,6 +389,18 @@ export default async function (pi: ExtensionAPI) {
     // 3. Load default persona from settings if no persona is active
     await loadDefaultPersona(ctx);
 
+    // 4. Load top-level context files from settings (unconditional, like AGENTS.md)
+    const settingsCtx = settings.context ?? [];
+    if (settingsCtx.length > 0) {
+      const resolvedCtxPaths = await Promise.all(
+        settingsCtx.map((c) => resolveAndTrackContext(c)),
+      );
+      const { added } = manager.addContextPaths(resolvedCtxPaths);
+      if (added > 0) {
+        persistContextState();
+      }
+    }
+
     updateStatusBar(ctx);
   });
 
@@ -581,9 +593,11 @@ export default async function (pi: ExtensionAPI) {
       if (profiles.length > 0) {
         message += "Profiles (settings.json):\n";
         for (const p of profiles) {
-          const personaLabel = looksLikePath(p.persona)
-            ? displayPath(p.persona)
-            : `"${p.persona.slice(0, 40)}${p.persona.length > 40 ? "..." : ""}"`;
+          const personaLabel = p.persona
+            ? (looksLikePath(p.persona)
+              ? displayPath(p.persona)
+              : `"${p.persona.slice(0, 40)}${p.persona.length > 40 ? "..." : ""}"`)
+            : "(no persona)";
           message += `  📦 ${p.name} → ${personaLabel}`;
           if (p.context.length > 0) {
             const fileCount = p.context.filter(looksLikePath).length;
@@ -602,9 +616,11 @@ export default async function (pi: ExtensionAPI) {
         if (message) message += "\n";
         message += "Profile files (.yml/.yaml):\n";
         for (const pf of profileFiles) {
-          const personaLabel = looksLikePath(pf.config.persona)
-            ? displayPath(pf.config.persona)
-            : `"${pf.config.persona.slice(0, 40)}${pf.config.persona.length > 40 ? "..." : ""}"`;
+          const personaLabel = pf.config.persona
+            ? (looksLikePath(pf.config.persona)
+              ? displayPath(pf.config.persona)
+              : `"${pf.config.persona.slice(0, 40)}${pf.config.persona.length > 40 ? "..." : ""}"`)
+            : "(no persona)";
           message += `  📋 ${pf.name} → ${personaLabel}`;
           const ctxCount = pf.config.context?.length ?? 0;
           if (ctxCount > 0) message += ` + ${ctxCount} context`;
@@ -647,9 +663,11 @@ export default async function (pi: ExtensionAPI) {
         for (const name of profileNames) {
           const p = profilesConfig[name];
           if (!p) continue;
-          const personaLabel = looksLikePath(p.persona)
-            ? displayPath(p.persona)
-            : `"${p.persona.slice(0, 40)}${p.persona.length > 40 ? "..." : ""}"`;
+          const personaLabel = p.persona
+            ? (looksLikePath(p.persona)
+              ? displayPath(p.persona)
+              : `"${p.persona.slice(0, 40)}${p.persona.length > 40 ? "..." : ""}"`)
+            : "(no persona)";
           message += `  📦 ${name} → ${personaLabel}`;
           if (p.context?.length) {
             const fileCount = p.context.filter(looksLikePath).length;
