@@ -584,6 +584,57 @@ describe("parseParamArgs", () => {
 });
 
 // ============================================================================
+// Tests: description truncation for persona listing
+// ============================================================================
+
+describe("description truncation for persona listing", () => {
+  it("should truncate long descriptions to 80 characters", () => {
+    const longDescription =
+      "Use this agent when designing or evaluating high-level system architecture, including component interactions, scalability patterns, technology stack selection, or deployment topology. Examples:";
+    const truncated =
+      longDescription.length > 80
+        ? longDescription.substring(0, 77) + "..."
+        : longDescription;
+
+    expect(longDescription.length).toBeGreaterThan(80);
+    expect(truncated.length).toBe(80);
+    expect(truncated.endsWith("...")).toBe(true);
+  });
+
+  it("should keep short descriptions unchanged", () => {
+    const shortDescription = "Architecture expert";
+    const truncated =
+      shortDescription.length > 80
+        ? shortDescription.substring(0, 77) + "..."
+        : shortDescription;
+
+    expect(shortDescription.length).toBeLessThan(80);
+    expect(truncated).toBe(shortDescription);
+    expect(truncated.endsWith("...")).toBe(false);
+  });
+
+  it("should handle exactly 80 character descriptions", () => {
+    const exactly80 = "a".repeat(80);
+    const truncated =
+      exactly80.length > 80 ? exactly80.substring(0, 77) + "..." : exactly80;
+
+    expect(exactly80.length).toBe(80);
+    expect(truncated).toBe(exactly80);
+    expect(truncated.endsWith("...")).toBe(false);
+  });
+
+  it("should handle 81 character descriptions", () => {
+    const eightyOne = "a".repeat(81);
+    const truncated =
+      eightyOne.length > 80 ? eightyOne.substring(0, 77) + "..." : eightyOne;
+
+    expect(eightyOne.length).toBe(81);
+    expect(truncated.length).toBe(80);
+    expect(truncated.endsWith("...")).toBe(true);
+  });
+});
+
+// ============================================================================
 // Tests: frontmatter params parsing
 // ============================================================================
 

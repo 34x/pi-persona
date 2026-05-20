@@ -811,7 +811,13 @@ export default async function (pi: ExtensionAPI) {
       message += "Personas:\n";
       for (const p of personas) {
         message += `  • ${p.name}`;
-        if (p.description) message += ` — ${p.description}`;
+        if (p.description) {
+          const truncatedDesc =
+            p.description.length > 80
+              ? p.description.substring(0, 77) + "..."
+              : p.description;
+          message += ` — ${truncatedDesc}`;
+        }
         message += "\n";
       }
     }
