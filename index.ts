@@ -117,6 +117,11 @@ export default async function (pi: ExtensionAPI) {
     type: "string",
   });
 
+  pi.registerFlag("persona-list", {
+    description: "List available personas and profiles",
+    type: "boolean",
+  });
+
   pi.registerFlag("persona-params", {
     description:
       "Set inference params as comma-separated key=value pairs (e.g., --persona-params temperature=0.7,top_p=0.9)",
@@ -353,6 +358,21 @@ export default async function (pi: ExtensionAPI) {
       await resolveAndLoadPersona(personaFlag.trim(), ctx);
     }
 
+    const personaListFlag = pi.getFlag("persona-list");
+    if (personaListFlag === true) {
+      // List all available personas and profiles
+      const msg = await buildPersonasAndProfilesMessage();
+      if (msg) {
+        console.log(msg);
+      } else {
+        console.log(
+          "No personas or profiles found. Create personas in ~/.pi/agent/personas/ " +
+            'or define profiles in .pi/settings.json under "pi-persona.profiles"',
+        );
+      }
+      process.exit(0);
+    }
+
     const paramsFlag = pi.getFlag("persona-params");
     if (typeof paramsFlag === "string" && paramsFlag.trim()) {
       const trimmed = paramsFlag.trim();
@@ -569,78 +589,7 @@ export default async function (pi: ExtensionAPI) {
   pi.registerCommand("persona:list", {
     description: "List available personas and profiles",
     handler: async (_args, ctx) => {
-      const [personas, profiles, profileFiles] = await Promise.all([
-        discovery.discoverPersonas(),
-        discovery.discoverProfiles(),
-        discovery.discoverProfileFiles(),
-      ]);
-
-      if (
-        personas.length === 0 &&
-        profiles.length === 0 &&
-        profileFiles.length === 0
-      ) {
-        ctx.ui.notify(
-          "No personas or profiles found. Create personas in ~/.pi/agent/personas/ " +
-            'or define profiles in .pi/settings.json under "pi-persona.profiles"',
-          "info",
-        );
-        return;
-      }
-
-      let message = "";
-
-      if (profiles.length > 0) {
-        message += "Profiles (settings.json):\n";
-        for (const p of profiles) {
-          const personaLabel = p.persona
-            ? (looksLikePath(p.persona)
-              ? displayPath(p.persona)
-              : `"${p.persona.slice(0, 40)}${p.persona.length > 40 ? "..." : ""}"`)
-            : "(no persona)";
-          message += `  📦 ${p.name} → ${personaLabel}`;
-          if (p.context.length > 0) {
-            const fileCount = p.context.filter(looksLikePath).length;
-            const textCount = p.context.length - fileCount;
-            const parts: string[] = [];
-            if (fileCount > 0)
-              parts.push(`${fileCount} file${fileCount !== 1 ? "s" : ""}`);
-            if (textCount > 0) parts.push(`${textCount} text`);
-            message += ` + ${parts.join(", ")}`;
-          }
-          message += "\n";
-        }
-      }
-
-      if (profileFiles.length > 0) {
-        if (message) message += "\n";
-        message += "Profile files (.yml/.yaml):\n";
-        for (const pf of profileFiles) {
-          const personaLabel = pf.config.persona
-            ? (looksLikePath(pf.config.persona)
-              ? displayPath(pf.config.persona)
-              : `"${pf.config.persona.slice(0, 40)}${pf.config.persona.length > 40 ? "..." : ""}"`)
-            : "(no persona)";
-          message += `  📋 ${pf.name} → ${personaLabel}`;
-          const ctxCount = pf.config.context?.length ?? 0;
-          if (ctxCount > 0) message += ` + ${ctxCount} context`;
-          if (pf.description) message += ` — ${pf.description}`;
-          message += ` (${displayPath(pf.fullPath)})`;
-          message += "\n";
-        }
-      }
-
-      if (personas.length > 0) {
-        if (message) message += "\n";
-        message += "Personas:\n";
-        for (const p of personas) {
-          message += `  • ${p.name}`;
-          if (p.description) message += ` — ${p.description}`;
-          message += "\n";
-        }
-      }
-
-      ctx.ui.notify(message, "info");
+      await listPersonasAndProfiles(ctx);
     },
   });
 
@@ -664,9 +613,9 @@ export default async function (pi: ExtensionAPI) {
           const p = profilesConfig[name];
           if (!p) continue;
           const personaLabel = p.persona
-            ? (looksLikePath(p.persona)
+            ? looksLikePath(p.persona)
               ? displayPath(p.persona)
-              : `"${p.persona.slice(0, 40)}${p.persona.length > 40 ? "..." : ""}"`)
+              : `"${p.persona.slice(0, 40)}${p.persona.length > 40 ? "..." : ""}"`
             : "(no persona)";
           message += `  📦 ${name} → ${personaLabel}`;
           if (p.context?.length) {
@@ -796,6 +745,96 @@ export default async function (pi: ExtensionAPI) {
       }
     },
   });
+  // ==========================================================================
+  // Helper: build personas/profiles listing message
+  // ==========================================================================
+
+  async function buildPersonasAndProfilesMessage(): Promise<string> {
+    const [personas, profiles, profileFiles] = await Promise.all([
+      discovery.discoverPersonas(),
+      discovery.discoverProfiles(),
+      discovery.discoverProfileFiles(),
+    ]);
+
+    if (
+      personas.length === 0 &&
+      profiles.length === 0 &&
+      profileFiles.length === 0
+    ) {
+      return "";
+    }
+
+    let message = "";
+
+    if (profiles.length > 0) {
+      message += "Profiles (settings.json):\n";
+      for (const p of profiles) {
+        const personaLabel = p.persona
+          ? looksLikePath(p.persona)
+            ? displayPath(p.persona)
+            : `"${p.persona.slice(0, 40)}${p.persona.length > 40 ? "..." : ""}"`
+          : "(no persona)";
+        message += `  📦 ${p.name} → ${personaLabel}`;
+        if (p.context.length > 0) {
+          const fileCount = p.context.filter(looksLikePath).length;
+          const textCount = p.context.length - fileCount;
+          const parts: string[] = [];
+          if (fileCount > 0)
+            parts.push(`${fileCount} file${fileCount !== 1 ? "s" : ""}`);
+          if (textCount > 0) parts.push(`${textCount} text`);
+          message += ` + ${parts.join(", ")}`;
+        }
+        message += "\n";
+      }
+    }
+
+    if (profileFiles.length > 0) {
+      if (message) message += "\n";
+      message += "Profile files (.yml/.yaml):\n";
+      for (const pf of profileFiles) {
+        const personaLabel = pf.config.persona
+          ? looksLikePath(pf.config.persona)
+            ? displayPath(pf.config.persona)
+            : `"${pf.config.persona.slice(0, 40)}${pf.config.persona.length > 40 ? "..." : ""}"`
+          : "(no persona)";
+        message += `  📋 ${pf.name} → ${personaLabel}`;
+        const ctxCount = pf.config.context?.length ?? 0;
+        if (ctxCount > 0) message += ` + ${ctxCount} context`;
+        if (pf.description) message += ` — ${pf.description}`;
+        message += ` (${displayPath(pf.fullPath)})`;
+        message += "\n";
+      }
+    }
+
+    if (personas.length > 0) {
+      if (message) message += "\n";
+      message += "Personas:\n";
+      for (const p of personas) {
+        message += `  • ${p.name}`;
+        if (p.description) message += ` — ${p.description}`;
+        message += "\n";
+      }
+    }
+
+    return message;
+  }
+
+  // Helper: list personas and profiles (for interactive /persona:list)
+  // ==========================================================================
+
+  async function listPersonasAndProfiles(ctx: ExtensionContext): Promise<void> {
+    const message = await buildPersonasAndProfilesMessage();
+    if (message === "") {
+      ctx.ui.notify(
+        "No personas or profiles found. Create personas in ~/.pi/agent/personas/ " +
+          'or define profiles in .pi/settings.json under "pi-persona.profiles"',
+        "info",
+      );
+      return;
+    }
+    ctx.ui.notify(message, "info");
+  }
+
   // ==========================================================================
   // /context:add
   // ==========================================================================

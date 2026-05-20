@@ -303,6 +303,9 @@ pi --persona-params temperature=0.3
 
 # Combine with other flags
 pi --persona tdd --persona-params temperature=0.3,top_p=0.8
+
+# List available personas and profiles (requires --print to avoid TUI)
+pi --persona-list --print
 ```
 
 **Note:** The `--persona-params` flag expects **comma-separated** `key=value` pairs:
@@ -316,6 +319,7 @@ CLI flags are applied during `session_start` and persist for the session.
 |------|-------------|---------|
 | `--persona <value>` | Load persona by name, path, or inline text | `--persona tdd` |
 | `--persona-params <k=v,k2=v2>` | Set inference params (comma-separated) | `--persona-params temperature=0.7,top_p=0.9` |
+| `--persona-list` | List available personas and profiles, then exit | `--persona-list --print` |
 
 **Precedence:** CLI flags override restored session state (which is restored first). CLI flags can in turn be overridden by `/persona` or `/persona:params` commands during the session. The default persona (from settings) only loads when no persona is active after all of the above.
 
