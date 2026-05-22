@@ -76,8 +76,8 @@ export class PersonaDiscovery {
    * Scan persona directories for .yml/.yaml profile files.
    *
    * Each file is parsed as a ProfileConfig with optional `name` and
-   * `description` fields. Relative paths in `persona` and `context`
-   * are resolved relative to the file's directory.
+   * `description` fields. Paths are resolved via resolveProfilePaths.
+   * See that method for the path resolution convention.
    */
   async discoverProfileFiles(): Promise<DiscoveredProfileFile[]> {
     const profiles: DiscoveredProfileFile[] = [];
@@ -175,9 +175,7 @@ export class PersonaDiscovery {
   /**
    * Load and parse a persona file at the given path.
    */
-  async loadPersonaFile(
-    fullPath: string,
-  ): Promise<{
+  async loadPersonaFile(fullPath: string): Promise<{
     prompt: string;
     frontmatter: PersonaFrontmatter;
     params?: Record<string, unknown>;
@@ -216,17 +214,20 @@ export class PersonaDiscovery {
   }
 
   /**
-   * Resolve relative paths in a profile config relative to the profile file's directory.
-   * Absolute paths and inline text are left unchanged.
+   * Resolve relative paths in a profile config using the profile file's directory.
+   *
+   * Convention:
+   * - `./foo.md`  or `../foo.md` → resolved relative to the profile file's directory
+   * - `foo.md`    (bare name)    → passed through unchanged (resolved against CWD later)
+   * - `/abs/path`                → passed through (absolute)
+   * - `~/path`                   → passed through (expanded by adapter later)
+   * - Inline text (non-path)     → passed through unchanged
    */
-  resolveProfilePaths(
-    config: ProfileConfig,
-    baseDir: string,
-  ): ProfileConfig {
+  resolveProfilePaths(config: ProfileConfig, baseDir: string): ProfileConfig {
     const persona = config.persona
-      ? (looksLikePath(config.persona)
-          ? this.resolveRelativePath(config.persona, baseDir)
-          : config.persona)
+      ? looksLikePath(config.persona)
+        ? this.resolveRelativePath(config.persona, baseDir)
+        : config.persona
       : undefined;
 
     const context =
@@ -238,13 +239,21 @@ export class PersonaDiscovery {
   }
 
   /**
-   * Resolve a path that might be relative to the given baseDir.
-   * Absolute paths and ~paths are returned as-is (after ~ expansion).
-   * Relative paths are resolved relative to baseDir.
+   * Resolve a path from a profile file.
+   *
+   * Convention for .yml/.yaml profile files:
+   * - `./foo.md` or `../foo.md` → resolved relative to the profile file's directory
+   * - `foo.md` (bare name)     → passed through unchanged (resolved against CWD by io.readFile)
+   * - `/abs/path`              → passed through (absolute)
+   * - `~/path`                 → passed through (expanded by adapter later)
    */
   private resolveRelativePath(filePath: string, baseDir: string): string {
     if (filePath.startsWith("/")) return filePath;
     if (filePath.startsWith("~")) return filePath; // expanded by adapter later
-    return path.resolve(baseDir, filePath);
+    // Only ./ and ../ are resolved relative to the profile file's directory
+    if (filePath.startsWith("./")) return path.resolve(baseDir, filePath);
+    if (filePath.startsWith("../")) return path.resolve(baseDir, filePath);
+    // Bare path (no ./ prefix) → CWD-relative, passed through unchanged
+    return filePath;
   }
 }

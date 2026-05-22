@@ -29,18 +29,9 @@ Set a persona — five different ways:
 ```bash
 /persona You are a helpful assistant     # 1. inline text (just type it)
 /persona ./my-prompts/reviewer.md        # 2. file path (.md / .txt)
-/persona tdd-expert                      # 3. registered persona name
-/persona tdd-be                          # 4. registered profile name
+/persona expert-reviewer                 # 3. registered persona name
+/persona my-project                      # 4. registered profile name
 /persona path/to/profile.yml             # 5. YAML profile bundle
-```
-
-**Examples using the bundled files:**
-
-```bash
-/persona tdd-be             # profile: TDD + backend context
-/persona tdd-fe             # profile: TDD + frontend context
-/persona strict-dev         # profile: strict TypeScript dev
-/persona personas/tdd-expert.md  # persona file directly
 ```
 
 **Set a default per-project** — add to `.pi/settings.json`:
@@ -48,7 +39,7 @@ Set a persona — five different ways:
 ```json
 {
   "pi-persona": {
-    "default": "strict-dev"
+    "default": "my-profile"
   }
 }
 ```
@@ -167,37 +158,57 @@ You are a creative writing assistant...
 
 **Standalone, portable profile files** that live in your persona directories alongside `.md` files. Drop a `.yml` file in `~/.pi/agent/personas/` (or any `personaPaths` directory) and it's automatically discovered.
 
-```yaml
-# tdd-be.yml — linked persona + linked context
-persona: tdd.md
-context:
-  - be/AGENTS.md
-```
+### Path resolution convention
+
+Profile files use a simple convention for `persona` and `context` entries:
+
+| Written as | Resolves to |
+|---|---|
+| `./file.md` or `../file.md` | Relative to **the `.yml` file's directory** |
+| `file.md` (no prefix) | Relative to **project root / CWD** |
+| `/absolute/path.md` | Absolute path (used as-is) |
+| `~/path.md` | Home directory (expanded by adapter) |
+| `"inline text"` (non-path) | Used as inline content |
+
+This means:
+- **Self-contained profile bundles** use `./` prefix to reference sibling files
+- **Project-level references** (like `AGENTS.md`) use bare paths with no prefix
 
 ```yaml
-# full-stack.yml — linked persona + multiline inline context
-persona: ./personas/dev.md
+# profile-example.yml — all path resolution cases
+persona: ./sibling-persona.md          # ./ → relative to this .yml file
 context:
-  - ./coding-guidelines.md
+  - ./coding-rules.md                  # ./ → relative to this .yml file
+  - ../shared/guidelines.md            # ../ → parent of this .yml file
+  - AGENTS.md                          # bare → project root / CWD
+  - docs/api-overview.md               # bare with subdir → project root
+  - /etc/config/policy.md              # absolute → used as-is
+  - ~/.pi/agent/personas/tdd-rules.md  # home → expanded to $HOME
   - |
     Always use TypeScript strict mode.
-    Follow the backend architecture patterns.
     Never use the `any` type.
+params:
+  temperature: 0.3
+  top_p: 0.8
 ```
 
-```yaml
-# mentor.yml — inline persona (no file needed)
-persona: "You are a patient coding mentor who explains concepts step by step"
-context:
-  - ./curriculum.md
-```
+**All in one table:**
+
+| Written in .yml | Resolves to |
+|---|---|
+| `./sibling-persona.md` | Relative to the `.yml` file's directory |
+| `../shared/guidelines.md` | Parent of the `.yml` file's directory |
+| `AGENTS.md` | Project root / CWD |
+| `docs/api-overview.md` | Project root / CWD |
+| `/etc/config/policy.md` | Absolute path (used as-is) |
+| `~/.pi/…/tdd-rules.md` | Home directory (expanded by adapter) |
+| `\| …` (multiline block) | Inline text (appended verbatim) |
 
 **How it works:**
 
-- `/persona tdd-be` — matches by filename (without extension)
+- `/persona profile-example` — matches by filename (without extension)
 - `/persona` — interactive selector shows profile files (📋) alongside profiles (📦) and personas
-- `/persona path/to/tdd-be.yml` — load by path
-- Relative paths (like `./be/AGENTS.md`) resolve relative to the `.yml` file's directory
+- `/persona path/to/profile-example.yml` — load by path
 - `persona` accepts a file path or inline text (same as profiles in settings.json)
 
 ## Settings Profiles
@@ -293,7 +304,7 @@ Set persona and params at startup via command-line flags:
 
 ```bash
 # Load persona by name, path, or inline text
-pi --persona "TDD Expert"
+pi --persona "expert-reviewer"
 pi --persona "~/.pi/agent/personas/tdd.md"
 pi --persona "You are a helpful assistant"
 
@@ -302,7 +313,7 @@ pi --persona-params temperature=0.7,top_p=0.9
 pi --persona-params temperature=0.3
 
 # Combine with other flags
-pi --persona tdd --persona-params temperature=0.3,top_p=0.8
+pi --persona my-profile --persona-params temperature=0.3,top_p=0.8
 
 # List available personas and profiles (requires --print to avoid TUI)
 pi --persona-list --print
@@ -330,7 +341,7 @@ Set a default persona/profile that loads automatically when pi starts and no per
 ```json
 {
   "pi-persona": {
-    "default": "strict-dev"
+    "default": "my-profile"
   }
 }
 ```
@@ -344,14 +355,14 @@ The default can be:
 ```json
 {
   "pi-persona": {
-    "default": "strict-dev"
+    "default": "my-profile"
   }
 }
 ```
 
 Resolution order:
-1. Settings profile named `"strict-dev"`
-2. Profile file named `strict-dev.yml` or `strict-dev.yaml` in persona directories
+1. Settings profile named `"my-profile"`
+2. Profile file named `my-profile.yml` or `my-profile.yaml` in persona directories
 3. File path (if it looks like a path)
 4. Inline text (fallback)
 
@@ -385,10 +396,10 @@ Resolution order:
 ```json
 {
   "pi-persona": {
-    "default": "strict-dev",
+    "default": "my-profile",
     "profiles": {
-      "strict-dev": {
-        "persona": "~/.pi/agent/personas/strict-dev.yml",
+      "my-profile": {
+        "persona": "~/.pi/agent/personas/my-persona.yml",
         "context": ["./AGENTS.md"]
       }
     }
@@ -396,4 +407,4 @@ Resolution order:
 }
 ```
 
-Now every time you open pi in this project, the `strict-dev` profile loads automatically.
+Now every time you open pi in this project, the `my-profile` profile loads automatically.

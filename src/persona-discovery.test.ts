@@ -437,13 +437,41 @@ describe("PersonaDiscovery", () => {
   // ---- resolveProfilePaths ----
 
   describe("resolveProfilePaths", () => {
-    it("should resolve relative paths relative to baseDir", () => {
+    it("should resolve ./ prefixed paths relative to baseDir", () => {
       const result = discovery.resolveProfilePaths(
         { persona: "./personas/dev.md", context: ["./guide.md"] },
         "/project/.pi/personas",
       );
       expect(result.persona).toBe("/project/.pi/personas/personas/dev.md");
       expect(result.context).toEqual(["/project/.pi/personas/guide.md"]);
+    });
+
+    it("should resolve ../ prefixed paths relative to baseDir", () => {
+      const result = discovery.resolveProfilePaths(
+        { persona: "../shared/dev.md", context: ["../shared/guide.md"] },
+        "/project/.pi/personas",
+      );
+      expect(result.persona).toBe("/project/.pi/shared/dev.md");
+      expect(result.context).toEqual(["/project/.pi/shared/guide.md"]);
+    });
+
+    it("should pass through bare paths unchanged (CWD-relative)", () => {
+      const result = discovery.resolveProfilePaths(
+        { persona: "dev.md", context: ["GUIDELINES.md"] },
+        "/project/.pi/personas",
+      );
+      // Bare paths pass through → resolved against CWD by io.readFile later
+      expect(result.persona).toBe("dev.md");
+      expect(result.context).toEqual(["GUIDELINES.md"]);
+    });
+
+    it("should pass through bare paths with directory prefix (CWD-relative)", () => {
+      const result = discovery.resolveProfilePaths(
+        { persona: "agents/dev.md", context: ["agents/GUIDELINES.md"] },
+        "/project/.pi/personas",
+      );
+      expect(result.persona).toBe("agents/dev.md");
+      expect(result.context).toEqual(["agents/GUIDELINES.md"]);
     });
 
     it("should leave absolute paths unchanged", () => {
@@ -471,6 +499,22 @@ describe("PersonaDiscovery", () => {
       );
       expect(result.persona).toBe("~/dev.md");
       expect(result.context).toEqual(["~/guide.md"]);
+    });
+
+    it("should handle mixed ./ and bare paths", () => {
+      const result = discovery.resolveProfilePaths(
+        {
+          persona: "./personas/dev.md",
+          context: ["./coding-rules.md", "AGENTS.md", "Always be strict"],
+        },
+        "/project/.pi/personas",
+      );
+      expect(result.persona).toBe("/project/.pi/personas/personas/dev.md");
+      expect(result.context).toEqual([
+        "/project/.pi/personas/coding-rules.md",
+        "AGENTS.md", // bare → CWD-relative
+        "Always be strict", // inline → unchanged
+      ]);
     });
   });
 });
