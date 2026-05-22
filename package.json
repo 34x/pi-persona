@@ -1,6 +1,6 @@
 {
   "name": "pi-persona",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Set custom agent personas while preserving context files, skills, tools, date, and working directory",
   "type": "module",
   "main": "index.ts",
@@ -24,7 +24,9 @@
   ],
   "pi": {
     "type": "extension",
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "scripts": {
     "test": "vitest run",

@@ -35,10 +35,7 @@ export interface DiscoveryOps {
     frontmatter: Record<string, unknown>;
     params?: Record<string, unknown>;
   } | null>;
-  resolveProfilePaths(
-    config: ProfileConfig,
-    baseDir: string,
-  ): ProfileConfig;
+  resolveProfilePaths(config: ProfileConfig, baseDir: string): ProfileConfig;
 }
 
 // ---- Dependency bag passed from the adapter ----
@@ -97,28 +94,31 @@ export async function buildSelectorList(
   for (const item of items) {
     if (item.kind === "settings-profile") {
       const p = item.profile;
-      const ctxCount = p.context.length;
+      const ctxPreview = formatContextPreview(p.context, deps.looksLikePath);
       if (p.persona) {
         const preview = deps.looksLikePath(p.persona)
           ? deps.displayPath(p.persona)
           : p.persona.slice(0, 20) + (p.persona.length > 20 ? "..." : "");
-        options.push(`📦 ${p.name}: ${preview} + ${ctxCount} context`);
+        options.push(`📦 ${p.name}: ${preview}${ctxPreview}`);
       } else {
-        options.push(`📦 ${p.name}: ${ctxCount} context file(s)`);
+        options.push(`📦 ${p.name}${ctxPreview}`);
       }
     } else if (item.kind === "profile-file") {
       const pf = item.pf;
-      const pCtxCount = pf.config.context?.length ?? 0;
+      const ctxPreview = formatContextPreview(
+        pf.config.context,
+        deps.looksLikePath,
+      );
       if (pf.config.persona) {
         const preview = deps.looksLikePath(pf.config.persona)
           ? deps.displayPath(pf.config.persona)
           : pf.config.persona.slice(0, 20) +
             (pf.config.persona.length > 20 ? "..." : "");
         const desc = pf.description ? ` — ${pf.description.slice(0, 30)}` : "";
-        options.push(`📋 ${pf.name}${desc}: ${preview} + ${pCtxCount} context`);
+        options.push(`📋 ${pf.name}${desc}: ${preview}${ctxPreview}`);
       } else {
         const desc = pf.description ? ` — ${pf.description.slice(0, 30)}` : "";
-        options.push(`📋 ${pf.name}${desc}: ${pCtxCount} context file(s)`);
+        options.push(`📋 ${pf.name}${desc}${ctxPreview}`);
       }
     } else {
       const p = item.persona;
@@ -136,6 +136,42 @@ export async function buildSelectorList(
   }
 
   return { items, options };
+}
+
+// ---- Helpers ----
+
+/**
+ * Format context entries as a compact inline preview.
+ * Paths show their basename, inline text is truncated.
+ * Capped at ~60 chars total; extra entries become "…".
+ */
+function formatContextPreview(
+  context: string[] | undefined,
+  looksLikePath: (s: string) => boolean,
+): string {
+  if (!context || context.length === 0) return "";
+
+  const maxTotal = 60;
+  const parts: string[] = [];
+  let total = 0;
+
+  for (const c of context) {
+    let preview: string;
+    if (looksLikePath(c)) {
+      preview = c.split("/").pop() ?? c;
+    } else {
+      preview = c.slice(0, 15) + (c.length > 15 ? "…" : "");
+    }
+
+    if (total + preview.length + (parts.length > 0 ? 2 : 0) > maxTotal) {
+      parts.push("…");
+      break;
+    }
+    parts.push(preview);
+    total += preview.length;
+  }
+
+  return ` [${parts.join(", ")}]`;
 }
 
 // ---- Param merging helpers ----
@@ -241,7 +277,10 @@ export async function handleSelectorSelection(
 
     // Resolve persona if specified (optional — profile may just add context/params)
     const resolved = resolvedConfig.persona
-      ? await deps.discovery.resolvePersona(resolvedConfig.persona, deps.homedir)
+      ? await deps.discovery.resolvePersona(
+          resolvedConfig.persona,
+          deps.homedir,
+        )
       : null;
 
     if (resolvedConfig.persona && !resolved) {

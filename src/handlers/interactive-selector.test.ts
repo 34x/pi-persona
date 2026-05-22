@@ -234,7 +234,7 @@ describe("buildSelectorList", () => {
     expect(options[0].length).toBeLessThan(60);
   });
 
-  it("should show context count in profile preview", async () => {
+  it("should show context filenames inline in profile preview", async () => {
     const manager = new PersonaManager();
     const deps = {
       manager,
@@ -261,7 +261,7 @@ describe("buildSelectorList", () => {
     };
 
     const { options } = await buildSelectorList(deps);
-    expect(options[0]).toContain("+ 3 context");
+    expect(options[0]).toContain("[a.md, b.md, c.md]");
   });
 
   it("should show description for profile files", async () => {
@@ -295,7 +295,7 @@ describe("buildSelectorList", () => {
     expect(options[0]).toContain("Profile description");
   });
 
-  it("should show context count for profile files", async () => {
+  it("should show context filenames inline for profile files", async () => {
     const manager = new PersonaManager();
     const deps = {
       manager,
@@ -323,7 +323,7 @@ describe("buildSelectorList", () => {
     };
 
     const { options } = await buildSelectorList(deps);
-    expect(options[0]).toContain("+ 1 context");
+    expect(options[0]).toContain("[ctx.md]");
   });
 
   it("should handle null profile file description without crashing", async () => {
